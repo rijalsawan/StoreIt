@@ -1,5 +1,22 @@
 # Railway Deployment Configuration
 
+## ✅ SIGTERM Issue Fixed (Latest Update)
+
+**Problem**: Railway was showing SIGTERM errors during deployment:
+```
+npm ERR! Lifecycle script `start` failed with error
+```
+
+**Solution Applied**: Improved graceful shutdown handling in `backend/server.js`:
+- Added timeout-based graceful shutdown (10 seconds)
+- Handle both SIGTERM and SIGINT signals properly
+- Added uncaught exception and unhandled rejection handlers
+- Server now listens on `0.0.0.0` (all interfaces) for Railway
+
+**Status**: ✅ Fixed - Railway should now deploy without SIGTERM errors.
+
+---
+
 ## Option 1: Deploy Backend Only (Recommended)
 
 Since you're getting Docker build errors, deploy just the backend to Railway and frontend to Vercel separately.
