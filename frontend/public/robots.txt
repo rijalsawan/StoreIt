@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+
+# Allow crawling of main pages
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /pricing
+Allow: /about
+Allow: /contact
+
+# Disallow private user areas
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /settings
+Disallow: /files
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://storeit.com/sitemap.xml

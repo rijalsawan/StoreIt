@@ -2,30 +2,84 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    
+    <!-- Basic Favicon -->
+    <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico?v=2025" />
+    <link rel="icon" type="image/png" sizes="16x16" href="%PUBLIC_URL%/favicon-16x16.png?v=2025" />
+    <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32x32.png?v=2025" />
+    <link rel="shortcut icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico?v=2025" />
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" sizes="57x57" href="%PUBLIC_URL%/apple-touch-icon-57x57.png" />
+    <link rel="apple-touch-icon" sizes="60x60" href="%PUBLIC_URL%/apple-touch-icon-60x60.png" />
+    <link rel="apple-touch-icon" sizes="72x72" href="%PUBLIC_URL%/apple-touch-icon-72x72.png" />
+    <link rel="apple-touch-icon" sizes="76x76" href="%PUBLIC_URL%/apple-touch-icon-76x76.png" />
+    <link rel="apple-touch-icon" sizes="114x114" href="%PUBLIC_URL%/apple-touch-icon-114x114.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="%PUBLIC_URL%/apple-touch-icon-120x120.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="%PUBLIC_URL%/apple-touch-icon-144x144.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/apple-touch-icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon-180x180.png" />
+    
+    <!-- Android Chrome Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="%PUBLIC_URL%/android-chrome-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="%PUBLIC_URL%/android-chrome-512x512.png" />
+    
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileColor" content="#3b82f6" />
+    <meta name="msapplication-TileImage" content="%PUBLIC_URL%/mstile-144x144.png" />
+    <meta name="msapplication-config" content="%PUBLIC_URL%/browserconfig.xml" />
+    
+    <!-- Basic Meta Tags -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#3b82f6" />
-    <meta name="description" content="StoreIt - Your secure cloud storage solution. Store, sync, and share your files anywhere." />
+    <meta name="author" content="StoreIt Team" />
+    <meta name="keywords" content="cloud storage, file sharing, backup, sync, secure storage, file management, documents, photos, videos" />
+    <meta name="description" content="StoreIt - Your secure cloud storage solution. Store, sync, and share your files anywhere with enterprise-grade security. Upload documents, photos, and videos with ease." />
     
     <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://storeit.com/">
-    <meta property="og:title" content="StoreIt - Secure Cloud Storage">
-    <meta property="og:description" content="Store, sync, and share your files securely with StoreIt. Access your documents, photos, and videos from any device.">
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://storeit.com/" />
+    <meta property="og:title" content="StoreIt - Secure Cloud Storage & File Sharing" />
+    <meta property="og:description" content="Store, sync, and share your files securely with StoreIt. Access your documents, photos, and videos from any device. Enterprise-grade security with user-friendly interface." />
+    <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="StoreIt" />
+    <meta property="og:locale" content="en_US" />
     
     <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://storeit.com/">
-    <meta property="twitter:title" content="StoreIt - Secure Cloud Storage">
-    <meta property="twitter:description" content="Store, sync, and share your files securely with StoreIt. Access your documents, photos, and videos from any device.">
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://storeit.com/" />
+    <meta name="twitter:title" content="StoreIt - Secure Cloud Storage & File Sharing" />
+    <meta name="twitter:description" content="Store, sync, and share your files securely with StoreIt. Access your documents, photos, and videos from any device." />
+    <meta name="twitter:image" content="%PUBLIC_URL%/twitter-image.png" />
+    <meta name="twitter:image:alt" content="StoreIt - Secure Cloud Storage Platform" />
+    <meta name="twitter:creator" content="@storeit" />
+    <meta name="twitter:site" content="@storeit" />
     
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!-- Additional SEO -->
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="revisit-after" content="7 days" />
+    <meta name="distribution" content="global" />
+    <meta name="rating" content="general" />
+    
+    <!-- PWA Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
-    <title>StoreIt - Secure Cloud Storage</title>
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <title>StoreIt - Secure Cloud Storage & File Sharing</title>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">
+        <h1>JavaScript Required</h1>
+        <p>You need to enable JavaScript to run StoreIt. Please enable JavaScript in your browser settings and refresh the page.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
   </body>
 </html>

@@ -21,7 +21,7 @@ const Pricing = () => {
     try {
       const [plansResponse, subscriptionResponse] = await Promise.all([
         api.get('/subscriptions/plans'),
-        user ? api.get('/subscriptions/status') : Promise.resolve({ data: null })
+        user ? api.get('/subscriptions/current') : Promise.resolve({ data: null })
       ]);
       
       setPlans(plansResponse.data.plans);
@@ -200,7 +200,7 @@ const Pricing = () => {
                 <Zap className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-2">Pro</h3>
-              <div className="text-4xl font-bold text-gray-900 mb-1">$5</div>
+              <div className="text-4xl font-bold text-gray-900 mb-1">$9.99</div>
               <p className="text-gray-600">per month</p>
             </div>
 
@@ -262,8 +262,8 @@ const Pricing = () => {
               <div className="bg-purple-100 text-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Crown className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Premium</h3>
-              <div className="text-4xl font-bold text-gray-900 mb-1">$15</div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Business</h3>
+              <div className="text-4xl font-bold text-gray-900 mb-1">$19.99</div>
               <p className="text-gray-600">per month</p>
             </div>
 

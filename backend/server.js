@@ -37,6 +37,8 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Body parsing middleware
+// Special handling for Stripe webhooks - they need raw body
+app.use('/api/subscriptions/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

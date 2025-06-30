@@ -7,29 +7,15 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { checkStorageLimit } = require('../middleware/subscription');
 const { updateUserStorage, formatBytes } = require('../utils/storage');
+const { FileStorageService } = require('../services/fileStorage');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const fileStorage = new FileStorageService();
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadDir = path.join(process.cwd(), '..', 'uploads', req.user.id);
-    try {
-      await fs.mkdir(uploadDir, { recursive: true });
-      cb(null, uploadDir);
-    } catch (error) {
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}-${file.originalname}`;
-    cb(null, uniqueName);
-  }
-});
-
+// Configure multer for temporary file uploads (to memory)
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: parseInt(process.env.MAX_FILE_SIZE) || 52428800 // 50MB default
   },
@@ -48,14 +34,33 @@ router.post('/upload', authenticateToken, upload.single('file'), checkStorageLim
 
     const { folderId } = req.body;
 
+    // Upload to external storage
+    const uploadResult = await fileStorage.uploadFile(
+      {
+        originalname: req.file.originalname,
+        buffer: req.file.buffer,
+        mimetype: req.file.mimetype,
+        size: req.file.size
+      },
+      req.user.id
+    );
+
     // Create file record in database
     const file = await prisma.file.create({
       data: {
-        filename: req.file.filename,
+        filename: req.file.originalname, // Use original name as filename
         originalName: req.file.originalname,
         mimetype: req.file.mimetype,
         size: BigInt(req.file.size),
-        path: req.file.path,
+        path: uploadResult.key, // Store the storage key as path
+        storageProvider: process.env.STORAGE_PROVIDER || 'B2',
+        storageKey: uploadResult.key,
+        storageUrl: uploadResult.url,
+        storageMetadata: JSON.stringify({
+          etag: uploadResult.etag,
+          versionId: uploadResult.versionId,
+          uploadedAt: new Date().toISOString()
+        }),
         userId: req.user.id,
         folderId: folderId || null
       }
@@ -77,16 +82,6 @@ router.post('/upload', authenticateToken, upload.single('file'), checkStorageLim
     });
   } catch (error) {
     console.error('Upload error:', error);
-    
-    // Clean up file if database operation failed
-    if (req.file) {
-      try {
-        await fs.unlink(req.file.path);
-      } catch (unlinkError) {
-        console.error('Failed to clean up file:', unlinkError);
-      }
-    }
-    
     res.status(500).json({ error: 'Failed to upload file' });
   }
 });
@@ -165,7 +160,32 @@ router.get('/:id/download', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Check if file exists on filesystem
+    // Handle external storage
+    if (file.storageProvider && file.storageKey) {
+      try {
+        const downloadUrl = await fileStorage.getDownloadUrl(file.storageKey);
+        
+        // For direct download, we can either redirect or stream
+        if (process.env.STORAGE_DIRECT_DOWNLOAD === 'true') {
+          // Redirect to the storage URL for direct download
+          return res.redirect(downloadUrl);
+        } else {
+          // Stream the file through our server
+          const fileStream = await fileStorage.getFileStream(file.storageKey);
+          
+          res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
+          res.setHeader('Content-Type', file.mimetype);
+          
+          fileStream.pipe(res);
+          return;
+        }
+      } catch (error) {
+        console.error('External storage download error:', error);
+        return res.status(404).json({ error: 'File not found in storage' });
+      }
+    }
+
+    // Fallback to local file system (for backward compatibility)
     try {
       await fs.access(file.path);
     } catch (error) {
@@ -197,11 +217,24 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Delete file from filesystem
-    try {
-      await fs.unlink(file.path);
-    } catch (error) {
-      console.log('File not found on disk, continuing with database deletion');
+    // Delete from external storage
+    if (file.storageProvider && file.storageKey) {
+      try {
+        console.log(`🔍 Deleting file from external storage - Provider: ${file.storageProvider}, Key: ${file.storageKey}`);
+        await fileStorage.deleteFile(file.storageKey);
+        console.log(`✅ File deleted from external storage: ${file.originalName}`);
+      } catch (error) {
+        console.error('❌ External storage deletion error:', error);
+        // Continue with database deletion even if external storage fails
+      }
+    } else {
+      console.log(`⚠️  File missing storage info - Provider: ${file.storageProvider}, Key: ${file.storageKey}`);
+      // Delete from local filesystem (fallback)
+      try {
+        await fs.unlink(file.path);
+      } catch (error) {
+        console.log('File not found on disk, continuing with database deletion');
+      }
     }
 
     // Delete from database

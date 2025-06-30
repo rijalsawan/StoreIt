@@ -43,6 +43,7 @@ model Subscription {
   status            SubscriptionStatus
   plan              SubscriptionPlan
   currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -61,6 +62,13 @@ model File {
   folderId    String?
   userId      String
   isPublic    Boolean  @default(false)
+  
+  // External storage fields
+  storageProvider String?  // 'local', 'backblaze', 's3', 'r2', etc.
+  storageKey      String?  // The key/path in the external storage
+  storageUrl      String?  // Direct URL for external storage (optional)
+  storageMetadata String?  // JSON string with additional storage metadata
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -123,6 +131,6 @@ enum SubscriptionStatus {
 
 enum SubscriptionPlan {
   FREE
-  PRO        // $5/month - 10GB
-  PREMIUM    // $15/month - 100GB
+  PRO        // $9.99/month - 100GB
+  BUSINESS   // $19.99/month - 1TB
 }

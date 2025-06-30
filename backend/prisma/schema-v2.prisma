@@ -1,0 +1,270 @@
+// Updated Prisma Schema with External Storage Support
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Storage and subscription
+  storageUsed     BigInt @default(0)
+  storageLimit    BigInt @default(524288000) // 500MB default for free users
+  subscriptionId  String?
+  customerId      String? // Stripe customer ID
+  subscription    Subscription?
+
+  // Relations
+  files       File[]
+  folders     Folder[]
+  sharedFiles SharedFile[]
+  settings    UserSettings?
+
+  @@map("users")
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  stripeSubId       String             @unique
+  status            SubscriptionStatus
+  plan              SubscriptionPlan
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model File {
+  id          String   @id @default(cuid())
+  filename    String
+  originalName String
+  mimetype    String
+  size        BigInt
+  
+  // Legacy local storage (keep for backward compatibility)
+  path        String
+  
+  // New external storage fields
+  storageKey      String? // Key/path in external storage (S3, B2, etc.)
+  storageProvider String? // 'S3', 'B2', 'R2', 'LOCAL', etc.
+  storageUrl      String? // Direct URL (if applicable)
+  storageMetadata String? // JSON string for additional metadata
+  
+  // File organization
+  folderId    String?
+  userId      String
+  
+  // File properties
+  isPublic    Boolean  @default(false)
+  isDeleted   Boolean  @default(false) // Soft delete for file recovery
+  deletedAt   DateTime?
+  
+  // Versioning support
+  version     Int      @default(1)
+  parentFileId String? // For file versions
+  
+  // Audit trail
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder      Folder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  sharedFiles SharedFile[]
+  
+  // File versioning
+  parentFile  File?        @relation("FileVersions", fields: [parentFileId], references: [id])
+  versions    File[]       @relation("FileVersions")
+
+  @@map("files")
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  userId    String
+  
+  // Folder properties
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[] @relation("FolderHierarchy")
+  files    File[]
+
+  @@map("folders")
+}
+
+model SharedFile {
+  id        String   @id @default(cuid())
+  fileId    String
+  userId    String
+  token     String   @unique
+  
+  // Sharing settings
+  expiresAt   DateTime?
+  maxDownloads Int?
+  downloadCount Int @default(0)
+  password     String? // Optional password protection
+  
+  // Access tracking
+  lastAccessedAt DateTime?
+  accessCount    Int      @default(0)
+  
+  createdAt DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("shared_files")
+}
+
+model UserSettings {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  settings  String   // JSON string containing user settings
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// New models for enhanced functionality
+
+model FileAccess {
+  id        String   @id @default(cuid())
+  fileId    String
+  userId    String?  // Null for anonymous access
+  action    String   // 'download', 'view', 'share'
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@map("file_access_logs")
+}
+
+model StorageQuota {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  
+  // Current usage
+  usedBytes    BigInt   @default(0)
+  quotaBytes   BigInt
+  
+  // Usage breakdown
+  filesCount   Int      @default(0)
+  foldersCount Int      @default(0)
+  
+  // Last calculated
+  lastCalculatedAt DateTime @default(now())
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("storage_quotas")
+}
+
+model BackupJob {
+  id        String   @id @default(cuid())
+  userId    String
+  
+  // Backup details
+  status    BackupStatus
+  type      BackupType
+  
+  // Progress tracking
+  totalFiles    Int?
+  processedFiles Int @default(0)
+  totalBytes    BigInt?
+  processedBytes BigInt @default(0)
+  
+  // Storage details
+  backupLocation String? // External storage location
+  backupKey      String? // Storage key/identifier
+  
+  // Metadata
+  startedAt   DateTime?
+  completedAt DateTime?
+  errorMessage String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("backup_jobs")
+}
+
+// Enums
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO        // $9.99/month - 100GB
+  BUSINESS   // $19.99/month - 1TB
+}
+
+enum BackupStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BackupType {
+  FULL
+  INCREMENTAL
+  MANUAL
+}
+
+// Add missing relations
+model File {
+  // ... existing fields ...
+  accessLogs FileAccess[]
+  // ... existing relations ...
+}
+
+model User {
+  // ... existing fields ...
+  storageQuota StorageQuota?
+  backupJobs   BackupJob[]
+  // ... existing relations ...
+}

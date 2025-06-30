@@ -1,11 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, User, Settings, CreditCard } from 'lucide-react';
+import { api } from '../utils/api';
+import { LogOut, User, Settings, CreditCard, Crown } from 'lucide-react';
 
 const Header = ({ title, showProfileMenu = true }) => {
   const { user, logout } = useAuth();
-  const [showMenu, setShowMenu] = React.useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState('Free');
+
+  useEffect(() => {
+    const fetchSubscriptionData = async () => {
+      try {
+        const response = await api.get('/subscriptions/current');
+        setCurrentPlan(response.data.planDetails?.name || 'Free');
+      } catch (error) {
+        console.error('Error fetching subscription data:', error);
+      }
+    };
+
+    if (user) {
+      fetchSubscriptionData();
+    }
+  }, [user]);
 
   const handleLogout = () => {
     logout();
@@ -45,9 +62,17 @@ const Header = ({ title, showProfileMenu = true }) => {
                     <User className="w-5 h-5" />
                   </div>
                   <div className="hidden md:block text-left">
-                    <p className="text-sm font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
-                    </p>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium text-gray-900">
+                        {user.firstName} {user.lastName}
+                      </p>
+                      {currentPlan !== 'Free' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          <Crown className="w-3 h-3 mr-1" />
+                          {currentPlan}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
                 </div>

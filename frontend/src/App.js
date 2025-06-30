@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import './styles/animations.css';
 
 // Pages
 import Landing from './pages/Landing';
@@ -12,6 +13,7 @@ import Pricing from './pages/Pricing';
 import Profile from './pages/Profile';
 import Subscription from './pages/Subscription';
 import Settings from './pages/Settings';
+import Success from './pages/Success';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -33,7 +35,12 @@ function AppContent() {
   }
 
   return (
-    <Router>
+    <Router
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}
+    >
       <div className="min-h-screen bg-gray-50">
         <Routes>
           {/* Public routes */}
@@ -50,6 +57,16 @@ function AppContent() {
             element={user ? <Navigate to="/dashboard" /> : <Register />} 
           />
           <Route path="/pricing" element={<Pricing />} />
+          
+          {/* Success page for post-checkout */}
+          <Route 
+            path="/success" 
+            element={
+              <ProtectedRoute>
+                <Success />
+              </ProtectedRoute>
+            } 
+          />
           
           {/* Protected routes */}
           <Route 

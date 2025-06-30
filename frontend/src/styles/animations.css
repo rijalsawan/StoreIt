@@ -1,0 +1,211 @@
+/* Custom animations for the dashboard */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Animate classes for Tailwind-style usage */
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: fadeIn;
+}
+
+.slide-in-from-top {
+  animation-name: slideInFromTop;
+}
+
+.zoom-in-95 {
+  animation-name: zoomIn;
+}
+
+.zoom-in {
+  animation-name: zoomIn;
+}
+
+.duration-300 {
+  animation-duration: 300ms;
+}
+
+.duration-500 {
+  animation-duration: 500ms;
+}
+
+.duration-700 {
+  animation-duration: 700ms;
+}
+
+/* File type specific styling */
+.file-icon {
+  transition: all 0.3s ease;
+}
+
+.file-icon.image {
+  background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
+  color: #d97706;
+}
+
+.file-icon.video {
+  background: linear-gradient(135deg, #ddd6fe 0%, #8b5cf6 100%);
+  color: #7c3aed;
+}
+
+.file-icon.audio {
+  background: linear-gradient(135deg, #dcfce7 0%, #22c55e 100%);
+  color: #16a34a;
+}
+
+.file-icon.document {
+  background: linear-gradient(135deg, #dbeafe 0%, #3b82f6 100%);
+  color: #2563eb;
+}
+
+.file-icon.archive {
+  background: linear-gradient(135deg, #fee2e2 0%, #ef4444 100%);
+  color: #dc2626;
+}
+
+.file-icon.default {
+  background: linear-gradient(135deg, #f1f5f9 0%, #64748b 100%);
+  color: #475569;
+}
+
+/* Enhanced hover effects */
+.group:hover .file-icon {
+  transform: scale(1.05);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Glassmorphism effect */
+.backdrop-blur-sm {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Custom scrollbar for the dashboard */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+
+/* Loading spinner improvements */
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Improved gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #1e293b, #475569);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Enhanced button hover effects */
+.btn-gradient {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  transition: all 0.3s ease;
+}
+
+.btn-gradient:hover {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4);
+}
+
+/* Progress bar animation */
+.progress-bar {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  transition: width 0.3s ease;
+}
+
+/* Folder navigation breadcrumb hover effect */
+.breadcrumb-item {
+  position: relative;
+  overflow: hidden;
+}
+
+.breadcrumb-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.breadcrumb-item:hover::before {
+  left: 100%;
+}

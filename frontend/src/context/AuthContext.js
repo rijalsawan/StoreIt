@@ -80,6 +80,18 @@ export const AuthProvider = ({ children }) => {
     setUser(prevUser => ({ ...prevUser, ...userData }));
   };
 
+  const refreshUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await api.get('/auth/profile');
+      setUser(response.data.user);
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -87,6 +99,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     updateUser,
+    refreshUser,
     checkAuthStatus
   };
 

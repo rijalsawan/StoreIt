@@ -1,11 +1,14 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const archiver = require('archiver');
 const { authenticateToken } = require('../middleware/auth');
 const { getUserStorageInfo } = require('../utils/storage');
+const { FileStorageService } = require('../services/fileStorage');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const fileStorage = new FileStorageService();
 
 // Get user dashboard stats
 router.get('/dashboard', authenticateToken, async (req, res) => {
@@ -125,10 +128,6 @@ router.delete('/folders/:id', authenticateToken, async (req, res) => {
       where: {
         id: req.params.id,
         userId: req.user.id
-      },
-      include: {
-        files: true,
-        children: true
       }
     });
 
@@ -136,57 +135,105 @@ router.delete('/folders/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Folder not found' });
     }
 
-    // Check if folder has files or subfolders
-    if (folder.files.length > 0 || folder.children.length > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete folder that contains files or subfolders' 
+    // Recursive function to delete all files and subfolders
+    const deleteRecursively = async (folderId) => {
+      // Get all files in this folder
+      const files = await prisma.file.findMany({
+        where: {
+          userId: req.user.id,
+          folderId: folderId
+        }
       });
-    }
 
-    await prisma.folder.delete({
-      where: { id: folder.id }
-    });
+      // Delete all files from storage and database
+      for (const file of files) {
+        try {
+          console.log(`🔍 Processing file for deletion: ${file.originalName} (${file.storageKey})`);
+          
+          // Delete from external storage (B2)
+          if (file.storageKey) {
+            console.log(`🗑️  Deleting from B2: ${file.storageKey}`);
+            await fileStorage.deleteFile(file.storageKey);
+          } else {
+            console.log(`⚠️  No storage key found for file: ${file.originalName}`);
+          }
+          
+          // Delete from database
+          await prisma.file.delete({
+            where: { id: file.id }
+          });
 
-    res.json({ message: 'Folder deleted successfully' });
+          // Update user storage (subtract file size)
+          const { updateUserStorage } = require('../utils/storage');
+          await updateUserStorage(req.user.id, -Number(file.size));
+          
+          console.log(`✅ File deleted successfully: ${file.originalName}`);
+        } catch (error) {
+          console.error(`❌ Failed to delete file ${file.originalName}:`, error);
+          // Continue with other files even if one fails
+        }
+      }
+
+      // Get all subfolders
+      const subFolders = await prisma.folder.findMany({
+        where: {
+          userId: req.user.id,
+          parentId: folderId
+        }
+      });
+
+      // Recursively delete all subfolders
+      for (const subFolder of subFolders) {
+        await deleteRecursively(subFolder.id);
+      }
+
+      // Finally, delete the folder itself
+      await prisma.folder.delete({
+        where: { id: folderId }
+      });
+    };
+
+    // Start recursive deletion
+    await deleteRecursively(folder.id);
+
+    res.json({ message: 'Folder and all contents deleted successfully' });
   } catch (error) {
     console.error('Delete folder error:', error);
     res.status(500).json({ error: 'Failed to delete folder' });
   }
 });
 
-// Update user profile
+// Update user profile (only firstName and lastName)
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
-    const { firstName, lastName, email } = req.body;
+    const { firstName, lastName } = req.body;
     const userId = req.user.id;
 
-    // Check if email is already taken by another user
-    if (email && email !== req.user.email) {
-      const existingUser = await prisma.user.findUnique({
-        where: { email }
-      });
-
-      if (existingUser) {
-        return res.status(400).json({ error: 'Email is already taken' });
-      }
+    // Validate required fields
+    if (!firstName || !lastName) {
+      return res.status(400).json({ error: 'First name and last name are required' });
     }
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
-        firstName,
-        lastName,
-        email
+        firstName: firstName.trim(),
+        lastName: lastName.trim()
       },
       select: {
         id: true,
         email: true,
         firstName: true,
         lastName: true,
-        subscriptionTier: true,
         storageUsed: true,
         storageLimit: true,
-        createdAt: true
+        createdAt: true,
+        subscription: {
+          select: {
+            plan: true,
+            status: true
+          }
+        }
       }
     });
 
@@ -380,9 +427,19 @@ router.delete('/account', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // Get all user files to delete from storage
+    const userFiles = await prisma.file.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        storageKey: true,
+        originalName: true
+      }
+    });
+
     // Delete user data in transaction
     await prisma.$transaction(async (tx) => {
-      // Delete files (file system cleanup should be handled separately)
+      // Delete files from database first
       await tx.file.deleteMany({ where: { userId } });
       
       // Delete folders
@@ -395,10 +452,234 @@ router.delete('/account', authenticateToken, async (req, res) => {
       await tx.user.delete({ where: { id: userId } });
     });
 
+    // Delete files from external storage (B2) after database cleanup
+    // Do this after transaction to avoid issues if storage deletion fails
+    for (const file of userFiles) {
+      try {
+        if (file.storageKey) {
+          await fileStorage.deleteFile(file.storageKey);
+        }
+      } catch (error) {
+        console.error(`Failed to delete file ${file.originalName} from storage:`, error);
+        // Continue with other files - don't fail the entire account deletion
+      }
+    }
+
     res.json({ message: 'Account deleted successfully' });
   } catch (error) {
     console.error('Delete account error:', error);
     res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+// Share folder
+router.post('/folders/:id/share', authenticateToken, async (req, res) => {
+  try {
+    const folderId = req.params.id;
+    const userId = req.user.id;
+    const { shareType, email } = req.body;
+
+    // Get folder info
+    const folder = await prisma.folder.findFirst({
+      where: {
+        id: folderId,
+        userId: userId
+      }
+    });
+
+    if (!folder) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+
+    if (shareType === 'public') {
+      // Create a public share link
+      const shareToken = require('crypto').randomBytes(32).toString('hex');
+      const shareUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/shared/folder/${shareToken}`;
+      
+      // In a real app, you'd save this share token to database
+      // For now, just return a mock URL
+      res.json({ 
+        shareUrl,
+        message: 'Public share link created'
+      });
+    } else if (shareType === 'private' && email) {
+      // For private sharing, you'd typically send an email invitation
+      // For now, just return success
+      res.json({ 
+        message: `Folder shared privately with ${email}`
+      });
+    } else {
+      res.status(400).json({ error: 'Invalid share type or missing email for private share' });
+    }
+
+  } catch (error) {
+    console.error('Share folder error:', error);
+    res.status(500).json({ error: 'Failed to share folder' });
+  }
+});
+
+// Download folder as ZIP
+router.get('/folders/:id/download', authenticateToken, async (req, res) => {
+  try {
+    const folderId = req.params.id;
+    const userId = req.user.id;
+
+    // Get folder info
+    const folder = await prisma.folder.findFirst({
+      where: {
+        id: folderId,
+        userId: userId
+      }
+    });
+
+    if (!folder) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+
+    // Get all files in this folder recursively
+    const getAllFilesInFolder = async (currentFolderId, folderPath = '') => {
+      const files = await prisma.file.findMany({
+        where: {
+          userId: userId,
+          folderId: currentFolderId
+        },
+        select: {
+          id: true,
+          originalName: true,
+          storageKey: true,
+          mimetype: true
+        }
+      });
+
+      const subFolders = await prisma.folder.findMany({
+        where: {
+          userId: userId,
+          parentId: currentFolderId
+        },
+        select: {
+          id: true,
+          name: true
+        }
+      });
+
+      let allFiles = files.map(file => ({
+        ...file,
+        folderPath
+      }));
+
+      // Recursively get files from subfolders
+      for (const subFolder of subFolders) {
+        const subFolderPath = folderPath ? `${folderPath}/${subFolder.name}` : subFolder.name;
+        const subFiles = await getAllFilesInFolder(subFolder.id, subFolderPath);
+        allFiles = allFiles.concat(subFiles);
+      }
+
+      return allFiles;
+    };
+
+    const allFiles = await getAllFilesInFolder(folderId);
+
+    if (allFiles.length === 0) {
+      return res.status(400).json({ error: 'Folder is empty' });
+    }
+
+    // Set response headers for ZIP download
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${folder.name}.zip"`);
+
+    // Create ZIP archive
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // Maximum compression
+    });
+
+    // Handle archive errors
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to create archive' });
+      }
+    });
+
+    // Pipe archive to response
+    archive.pipe(res);
+
+    // Add files to archive
+    for (const file of allFiles) {
+      try {
+        // Download file from storage
+        const fileStream = await fileStorage.getFileStream(file.storageKey);
+        
+        // Convert stream to buffer for archiver
+        const chunks = [];
+        for await (const chunk of fileStream) {
+          chunks.push(chunk);
+        }
+        const fileBuffer = Buffer.concat(chunks);
+        
+        // Add to archive with proper path
+        const archivePath = file.folderPath 
+          ? `${file.folderPath}/${file.originalName}`
+          : file.originalName;
+        
+        archive.append(fileBuffer, { name: archivePath });
+      } catch (error) {
+        console.error(`Failed to add file ${file.originalName} to archive:`, error);
+        // Continue with other files
+      }
+    }
+
+    // Finalize the archive
+    await archive.finalize();
+
+  } catch (error) {
+    console.error('Download folder error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to download folder' });
+    }
+  }
+});
+
+// Get folder path for breadcrumb navigation
+router.get('/folders/:id/path', authenticateToken, async (req, res) => {
+  try {
+    const folderId = req.params.id;
+    const userId = req.user.id;
+
+    // Build path from root to current folder
+    const buildPath = async (currentId, path = []) => {
+      if (!currentId) return path;
+
+      const folder = await prisma.folder.findFirst({
+        where: {
+          id: currentId,
+          userId: userId
+        },
+        select: {
+          id: true,
+          name: true,
+          parentId: true
+        }
+      });
+
+      if (!folder) return path;
+
+      // Add current folder to beginning of path
+      path.unshift(folder);
+
+      // Recursively build path to root
+      if (folder.parentId) {
+        return await buildPath(folder.parentId, path);
+      }
+
+      return path;
+    };
+
+    const path = await buildPath(folderId);
+
+    res.json({ path });
+  } catch (error) {
+    console.error('Get folder path error:', error);
+    res.status(500).json({ error: 'Failed to get folder path' });
   }
 });
 
