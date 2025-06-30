@@ -843,6 +843,28 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+// Helper function to map Stripe subscription status to Prisma enum
+function mapStripeStatusToPrisma(stripeStatus) {
+  const statusMap = {
+    'active': 'ACTIVE',
+    'incomplete': 'INACTIVE', // Incomplete subscription should be treated as inactive
+    'incomplete_expired': 'CANCELED',
+    'past_due': 'PAST_DUE',
+    'canceled': 'CANCELED',
+    'unpaid': 'UNPAID',
+    'paused': 'INACTIVE',
+    'trialing': 'ACTIVE' // Trial subscriptions should be active
+  };
+  
+  const mappedStatus = statusMap[stripeStatus.toLowerCase()];
+  if (!mappedStatus) {
+    console.warn(`Unknown Stripe status: ${stripeStatus}, defaulting to INACTIVE`);
+    return 'INACTIVE';
+  }
+  
+  return mappedStatus;
+}
+
 // Helper functions for webhook handlers
 async function handleCheckoutCompleted(session) {
   try {
@@ -873,14 +895,14 @@ async function handleCheckoutCompleted(session) {
           upsert: {
             create: {
               stripeSubId: subscription.id,
-              status: 'ACTIVE',
+              status: mapStripeStatusToPrisma(subscription.status),
               plan: planType,
               currentPeriodEnd: new Date(subscription.current_period_end * 1000),
               cancelAtPeriodEnd: false
             },
             update: {
               stripeSubId: subscription.id,
-              status: 'ACTIVE',
+              status: mapStripeStatusToPrisma(subscription.status),
               plan: planType,
               currentPeriodEnd: new Date(subscription.current_period_end * 1000),
               cancelAtPeriodEnd: false
@@ -925,14 +947,14 @@ async function handleSubscriptionCreated(subscription) {
           upsert: {
             create: {
               stripeSubId: subscription.id,
-              status: subscription.status.toUpperCase(),
+              status: mapStripeStatusToPrisma(subscription.status),
               plan: planType,
               currentPeriodEnd: new Date(subscription.current_period_end * 1000),
               cancelAtPeriodEnd: subscription.cancel_at_period_end
             },
             update: {
               stripeSubId: subscription.id,
-              status: subscription.status.toUpperCase(),
+              status: mapStripeStatusToPrisma(subscription.status),
               plan: planType,
               currentPeriodEnd: new Date(subscription.current_period_end * 1000),
               cancelAtPeriodEnd: subscription.cancel_at_period_end
@@ -964,7 +986,7 @@ async function handleSubscriptionUpdated(subscription) {
     const plan = planType ? SUBSCRIPTION_PLANS[planType] : null;
 
     const updateData = {
-      status: subscription.status.toUpperCase(),
+      status: mapStripeStatusToPrisma(subscription.status),
       currentPeriodEnd: new Date(subscription.current_period_end * 1000),
       cancelAtPeriodEnd: subscription.cancel_at_period_end
     };
