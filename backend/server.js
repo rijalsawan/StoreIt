@@ -97,8 +97,44 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Client URL: ${process.env.CLIENT_URL || 'http://localhost:3000'}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Health check: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`📡 Server listening on all interfaces (0.0.0.0:${PORT})`);
+});
+
+// Graceful shutdown handling
+const gracefulShutdown = (signal) => {
+  console.log(`🛑 ${signal} received, shutting down gracefully...`);
+  
+  server.close((err) => {
+    if (err) {
+      console.error('❌ Error during server shutdown:', err);
+      process.exit(1);
+    }
+    console.log('✅ Server closed successfully');
+    process.exit(0);
+  });
+  
+  // Force shutdown after 10 seconds if graceful shutdown takes too long
+  setTimeout(() => {
+    console.error('⚠️ Forced shutdown after 10 seconds timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions gracefully
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('unhandledRejection');
 });
