@@ -1,29 +1,99 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useContext } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, X, Cloud, CheckCircle, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../utils/api';
 
+// Create a context for upload progress
+const UploadContext = React.createContext();
+
+export const UploadProvider = ({ children }) => {
+  const [uploads, setUploads] = React.useState({});
+
+  const addUpload = (fileName, fileSize) => {
+    setUploads(prev => ({
+      ...prev,
+      [fileName]: {
+        progress: 0,
+        size: fileSize,
+        status: 'uploading'
+      }
+    }));
+  };
+
+  const updateUpload = (fileName, progress, status = 'uploading') => {
+    setUploads(prev => ({
+      ...prev,
+      [fileName]: {
+        ...prev[fileName],
+        progress,
+        status
+      }
+    }));
+  };
+
+  const setUploadError = (fileName, error) => {
+    setUploads(prev => ({
+      ...prev,
+      [fileName]: {
+        ...prev[fileName],
+        status: 'error',
+        error
+      }
+    }));
+  };
+
+  const removeUpload = (fileName) => {
+    setUploads(prev => {
+      const newUploads = { ...prev };
+      delete newUploads[fileName];
+      return newUploads;
+    });
+  };
+
+  return (
+    <UploadContext.Provider value={{
+      uploads,
+      addUpload,
+      updateUpload,
+      setUploadError,
+      removeUpload
+    }}>
+      {children}
+    </UploadContext.Provider>
+  );
+};
+
+export const useUpload = () => {
+  const context = useContext(UploadContext);
+  if (!context) {
+    throw new Error('useUpload must be used within an UploadProvider');
+  }
+  return context;
+};
+
 const FileUpload = ({ onUploadComplete, folderId = null }) => {
   const [uploading, setUploading] = React.useState(false);
-  const [uploadProgress, setUploadProgress] = React.useState({});
+  const uploadContext = useUpload();
 
   const onDrop = useCallback(async (acceptedFiles) => {
+    if (acceptedFiles.length === 0) return;
+    
     setUploading(true);
     
-    for (const file of acceptedFiles) {
+    // Add all files to upload tracking
+    acceptedFiles.forEach(file => {
+      uploadContext.addUpload(file.name, file.size);
+    });
+
+    // Upload files concurrently with a limit
+    const uploadPromises = acceptedFiles.map(async (file) => {
       try {
         const formData = new FormData();
         formData.append('file', file);
         if (folderId) {
           formData.append('folderId', folderId);
         }
-
-        // Update progress for this file
-        setUploadProgress(prev => ({
-          ...prev,
-          [file.name]: 0
-        }));
 
         const response = await api.post('/files/upload', formData, {
           headers: {
@@ -33,41 +103,50 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
             const percentCompleted = Math.round(
               (progressEvent.loaded * 100) / progressEvent.total
             );
-            setUploadProgress(prev => ({
-              ...prev,
-              [file.name]: percentCompleted
-            }));
+            uploadContext.updateUpload(file.name, percentCompleted);
           }
         });
 
-        toast.success(`${file.name} uploaded successfully!`);
-        
-        // Remove from progress tracking
-        setUploadProgress(prev => {
-          const newProgress = { ...prev };
-          delete newProgress[file.name];
-          return newProgress;
-        });
+        // Mark as completed
+        uploadContext.updateUpload(file.name, 100, 'success');
 
         if (onUploadComplete) {
           onUploadComplete(response.data.file);
         }
 
+        return { success: true, file: file.name };
       } catch (error) {
         console.error('Upload error:', error);
-        toast.error(`Failed to upload ${file.name}: ${error.response?.data?.error || 'Unknown error'}`);
-        
-        // Remove from progress tracking
-        setUploadProgress(prev => {
-          const newProgress = { ...prev };
-          delete newProgress[file.name];
-          return newProgress;
-        });
+        const errorMessage = error.response?.data?.error || 'Upload failed';
+        uploadContext.setUploadError(file.name, errorMessage);
+        toast.error(`Failed to upload ${file.name}`);
+        return { success: false, file: file.name, error: errorMessage };
       }
+    });
+
+    // Wait for all uploads to complete
+    const results = await Promise.allSettled(uploadPromises);
+    const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    const failCount = results.length - successCount;
+
+    if (successCount > 0) {
+      toast.success(
+        successCount === 1 
+          ? '1 file uploaded successfully!'
+          : `${successCount} files uploaded successfully!`
+      );
+    }
+
+    if (failCount > 0) {
+      toast.error(
+        failCount === 1
+          ? '1 file failed to upload'
+          : `${failCount} files failed to upload`
+      );
     }
     
     setUploading(false);
-  }, [folderId, onUploadComplete]);
+  }, [folderId, onUploadComplete, uploadContext]);
 
   const {
     getRootProps,
@@ -80,8 +159,6 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
     maxSize: 50 * 1024 * 1024, // 50MB
   });
 
-  const activeUploads = Object.keys(uploadProgress);
-
   return (
     <div className="w-full">
       <div
@@ -91,10 +168,12 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
             ? 'border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 scale-105' 
             : isDragReject
             ? 'border-red-400 bg-red-50'
+            : uploading
+            ? 'border-blue-400 bg-blue-50 cursor-not-allowed'
             : 'border-slate-300 bg-slate-50 hover:border-indigo-300 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50'
         }`}
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} disabled={uploading} />
         
         {/* Background Animation */}
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -105,6 +184,8 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
               ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white scale-110'
               : isDragReject
               ? 'bg-red-500 text-white'
+              : uploading
+              ? 'bg-blue-500 text-white animate-pulse'
               : 'bg-gradient-to-br from-slate-100 to-slate-200 text-slate-600 group-hover:from-indigo-100 group-hover:to-purple-100 group-hover:text-indigo-600 group-hover:scale-110'
           }`}>
             {isDragReject ? (
@@ -116,7 +197,14 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
             )}
           </div>
           
-          {isDragActive && !isDragReject && (
+          {uploading && (
+            <div className="animate-in zoom-in duration-300">
+              <h3 className="text-2xl font-bold text-blue-600 mb-2">Uploading files...</h3>
+              <p className="text-blue-500">Please wait while your files are being uploaded</p>
+            </div>
+          )}
+          
+          {isDragActive && !isDragReject && !uploading && (
             <div className="animate-in zoom-in duration-300">
               <h3 className="text-2xl font-bold text-indigo-600 mb-2">Drop files here!</h3>
               <p className="text-indigo-500">Release to upload to your cloud</p>
@@ -130,7 +218,7 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
             </div>
           )}
           
-          {!isDragActive && (
+          {!isDragActive && !uploading && (
             <div className="animate-in fade-in duration-300">
               <h3 className="text-2xl font-bold text-slate-900 mb-3">Upload Files</h3>
               <p className="text-slate-600 mb-4 text-lg">
@@ -153,50 +241,6 @@ const FileUpload = ({ onUploadComplete, folderId = null }) => {
           )}
         </div>
       </div>
-
-      {/* Modern Upload Progress */}
-      {activeUploads.length > 0 && (
-        <div className="mt-8 space-y-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-xl flex items-center justify-center">
-              <Upload className="w-4 h-4 text-indigo-600" />
-            </div>
-            <h4 className="text-lg font-bold text-slate-900">Uploading Files</h4>
-          </div>
-          
-          {activeUploads.map(fileName => (
-            <div key={fileName} className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-white/20 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center">
-                    <Upload className="w-5 h-5 text-slate-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900 truncate max-w-xs">
-                      {fileName}
-                    </p>
-                    <p className="text-sm text-slate-500">Uploading...</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-indigo-600">
-                    {uploadProgress[fileName]}%
-                  </p>
-                </div>
-              </div>
-              
-              <div className="relative">
-                <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="h-3 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress[fileName]}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

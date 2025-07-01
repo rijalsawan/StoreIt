@@ -67,6 +67,13 @@ const createCheckoutSession = async (userId, planType, email, customerName) => {
       }
     }
 
+    // Determine the correct frontend URL for redirects
+    const frontendUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    
+    console.log(`Creating checkout session with frontend URL: ${frontendUrl}`);
+    console.log(`Success URL will be: ${frontendUrl}/success`);
+    console.log(`Cancel URL will be: ${frontendUrl}/subscription`);
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -76,8 +83,8 @@ const createCheckoutSession = async (userId, planType, email, customerName) => {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.CLIENT_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL}/subscription?canceled=true`,
+      success_url: `${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${frontendUrl}/subscription?canceled=true`,
       customer: customer.id,
       allow_promotion_codes: true,
       billing_address_collection: 'required',
@@ -122,7 +129,8 @@ const createPortalSession = async (customerId, returnUrl = null) => {
     }
 
     // Ensure return URL is valid
-    const defaultReturnUrl = `${process.env.CLIENT_URL}/subscription`;
+    const frontendUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const defaultReturnUrl = `${frontendUrl}/subscription`;
     const validReturnUrl = returnUrl && returnUrl.startsWith('http') ? returnUrl : defaultReturnUrl;
 
     console.log(`Creating portal session for customer ${customerId} with return URL: ${validReturnUrl}`);

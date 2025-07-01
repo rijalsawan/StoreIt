@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
-import FileUpload from '../components/FileUpload';
+import FileUpload, { UploadProvider, useUpload } from '../components/FileUpload';
+import UploadProgressToast from '../components/UploadProgressToast';
 import StorageIndicator from '../components/StorageIndicator';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useAuth } from '../context/AuthContext';
@@ -39,7 +40,9 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-const Dashboard = () => {
+// Main Dashboard component with upload context
+const DashboardContent = () => {
+  const uploadContext = useUpload();
   const { user, updateUser } = useAuth();
   const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -100,12 +103,20 @@ const Dashboard = () => {
 
       setFiles(filesResponse.data.files);
       setFolders(foldersResponse.data.folders);
-      setStorageInfo(dashboardResponse.data.storageInfo);
+      
+      // Safely handle storage data
+      const storageData = dashboardResponse.data.storageInfo;
+      const safeStorageInfo = {
+        storageUsed: Number(storageData.storageUsed) || 0,
+        storageLimit: Number(storageData.storageLimit) || 1073741824 // Default 1GB
+      };
+      
+      setStorageInfo(safeStorageInfo);
       setSubscriptionData(subscriptionResponse.data);
       
       updateUser({
-        storageUsed: dashboardResponse.data.storageInfo.storageUsed.toString(),
-        storageLimit: dashboardResponse.data.storageInfo.storageLimit.toString()
+        storageUsed: safeStorageInfo.storageUsed.toString(),
+        storageLimit: safeStorageInfo.storageLimit.toString()
       });
       
     } catch (error) {
@@ -1243,5 +1254,6 @@ const Dashboard = () => {
             </div>
           );
         };
-        
-        export default Dashboard;
+
+// Export the main Dashboard component for now
+export default DashboardContent;
