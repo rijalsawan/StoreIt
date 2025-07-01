@@ -185,7 +185,7 @@ const Subscription = () => {
     const IconComponent = config.icon;
 
     return (
-      <span className={`inline-flex items-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium border ${config.color}`}>
+      <span className={`inline-flex items-center px-2 sm:px-3 py-1 max-sm:w-[4.5rem] sm:py-1.5 rounded-full text-xs sm:text-sm font-medium border ${config.color}`}>
         <IconComponent className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5" />
         {config.text}
       </span>

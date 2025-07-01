@@ -163,12 +163,12 @@ const Landing = () => {
                 </span>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Pro</h3>
-              <p className="text-3xl font-bold text-gray-900 mb-1">$5</p>
+              <p className="text-3xl font-bold text-gray-900 mb-1">$9.99</p>
               <p className="text-gray-600 mb-6">per month</p>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center">
                   <Check className="w-5 h-5 text-green-500 mr-3" />
-                  <span className="text-gray-600">10GB Storage</span>
+                  <span className="text-gray-600">100GB Storage</span>
                 </li>
                 <li className="flex items-center">
                   <Check className="w-5 h-5 text-green-500 mr-3" />
@@ -189,13 +189,13 @@ const Landing = () => {
 
             {/* Premium Plan */}
             <div className="bg-white rounded-xl p-8 border border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Premium</h3>
-              <p className="text-3xl font-bold text-gray-900 mb-1">$15</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Business</h3>
+              <p className="text-3xl font-bold text-gray-900 mb-1">$19.99</p>
               <p className="text-gray-600 mb-6">per month</p>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center">
                   <Check className="w-5 h-5 text-green-500 mr-3" />
-                  <span className="text-gray-600">100GB Storage</span>
+                  <span className="text-gray-600">1TB Storage</span>
                 </li>
                 <li className="flex items-center">
                   <Check className="w-5 h-5 text-green-500 mr-3" />
