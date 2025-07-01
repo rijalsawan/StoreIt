@@ -37,13 +37,19 @@ api.interceptors.response.use(
 
 // Utility functions
 export const formatBytes = (bytes) => {
-  if (bytes === 0) return '0 Bytes';
+  // Handle edge cases
+  if (bytes === null || bytes === undefined || isNaN(bytes)) return '0 Bytes';
+  
+  // Ensure non-negative
+  const safeBytes = Math.max(0, Number(bytes));
+  
+  if (safeBytes === 0) return '0 Bytes';
   
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const i = Math.floor(Math.log(safeBytes) / Math.log(k));
   
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((safeBytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
 export const getFileIcon = (mimetype) => {

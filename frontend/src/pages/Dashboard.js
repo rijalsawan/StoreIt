@@ -97,11 +97,13 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
+      // Add timestamp to prevent caching issues
+      const timestamp = Date.now();
       const [filesResponse, foldersResponse, dashboardResponse, subscriptionResponse] = await Promise.all([
-        api.get(`/files?folderId=${currentFolder || ''}&search=${searchTerm}`),
-        api.get(`/user/folders?parentId=${currentFolder || ''}`),
-        api.get('/user/dashboard'),
-        api.get('/subscriptions/current').catch(() => ({ data: null }))
+        api.get(`/files?folderId=${currentFolder || ''}&search=${searchTerm}&_t=${timestamp}`),
+        api.get(`/user/folders?parentId=${currentFolder || ''}&_t=${timestamp}`),
+        api.get(`/user/dashboard?_t=${timestamp}`),
+        api.get(`/subscriptions/current?_t=${timestamp}`).catch(() => ({ data: null }))
       ]);
 
       setFiles(filesResponse.data.files);
@@ -110,12 +112,15 @@ const Dashboard = () => {
       // Safely handle storage data
       const storageData = dashboardResponse.data?.storageInfo || {};
       const safeStorageInfo = {
-        storageUsed: Number(storageData.storageUsed) || 0,
-        storageLimit: Number(storageData.storageLimit) || 1073741824 // Default 1GB
+        storageUsed: Math.max(0, Number(storageData.storageUsed) || 0), // Ensure never negative
+        storageLimit: Number(storageData.storageLimit) || 524288000, // Default to 500MB for FREE
+        storageLimitFormatted: storageData.storageLimitFormatted || 'Unknown',
+        plan: storageData.plan || 'FREE'
       };
       
-      console.log('Storage data from API:', storageData);
-      console.log('Safe storage info:', safeStorageInfo);
+      console.log('🔍 Dashboard - Storage data from API:', storageData);
+      console.log('🔍 Dashboard - Safe storage info:', safeStorageInfo);
+      console.log('🔍 Dashboard - Plan detected:', storageData.plan);
       
       setStorageInfo(safeStorageInfo);
       setSubscriptionData(subscriptionResponse.data);
@@ -136,8 +141,7 @@ const Dashboard = () => {
   const handleFileUpload = (uploadedFile) => {
   setFiles(prev => [uploadedFile, ...prev]);
   fetchDashboardData();
-  setShowUpload(false); // This will close the modal
-  toast.success('File uploaded successfully!');
+  setShowUpload(false); 
 };
 
   const handleDeleteFile = (fileId, fileName) => {
@@ -390,7 +394,7 @@ const Dashboard = () => {
       return 0;
     }
     
-    const used = Number(storageInfo.storageUsed) || 0;
+    const used = Math.max(0, Number(storageInfo.storageUsed) || 0); // Ensure never negative
     const limit = Number(storageInfo.storageLimit) || 1;
     
     if (limit <= 0) return 0;
@@ -437,7 +441,7 @@ const Dashboard = () => {
                   Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {user?.firstName}
                 </h1>
                 <p className="text-gray-600 mt-1">
-                  {files.length + folders.length} items • {formatBytes(storageInfo?.storageUsed || 0)} used
+                  {files.length + folders.length} items • {formatBytes(Math.max(0, storageInfo?.storageUsed || 0))} used
                 </p>
               </div>
             </div>
@@ -454,23 +458,24 @@ const Dashboard = () => {
           <div className="pb-8">
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3 ">
                   <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
                     <Cloud className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Storage</h3>
                     <p className="text-sm text-gray-600">
-                      {formatBytes(storageInfo?.storageUsed || 0)} of {formatBytes(storageInfo?.storageLimit || 1073741824)} used
+                      {storageInfo?.storageUsedFormatted || formatBytes(Math.max(0, storageInfo?.storageUsed || 0))} of {storageInfo?.storageLimitFormatted || formatBytes(storageInfo?.storageLimit || 524288000)} used
                     </p>
                   </div>
-                  {subscriptionData?.planDetails?.name && subscriptionData.planDetails.name !== 'Free' && (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  
+                </div>
+                {subscriptionData?.planDetails?.name && subscriptionData.planDetails.name !== 'Free' && (
+                    <span className="inline-flex items-center px-3 max-sm:mx-4 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                       <Crown className="w-3 h-3 mr-1" />
                       {subscriptionData.planDetails.name}
                     </span>
                   )}
-                </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-gray-900">{storageUsedPercent}%</div>
                   <div className="text-sm text-gray-500">used</div>

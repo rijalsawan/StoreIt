@@ -6,39 +6,172 @@ const { v4: uuidv4 } = require('uuid');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 const { checkStorageLimit } = require('../middleware/subscription');
-const { updateUserStorage, formatBytes } = require('../utils/storage');
+const { updateUserStorage, formatBytes, getUserUploadLimit } = require('../utils/storage');
 const { FileStorageService } = require('../services/fileStorage');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 const fileStorage = new FileStorageService();
 
-// Configure multer for temporary file uploads (to memory)
+// Configure multer for file uploads
+// Use disk storage for large files to avoid memory issues
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../temp-uploads');
+    require('fs').mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: storage,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 52428800 // 50MB default
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 1073741824, // Default 1GB (will be overridden dynamically)
+    files: 10 // Allow up to 10 files at once
   },
   fileFilter: (req, file, cb) => {
     // Add file type restrictions if needed
+    // For now, allow all file types
     cb(null, true);
   }
 });
 
+// Middleware to check user's upload limit before processing
+const checkUploadLimit = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const uploadInfo = await getUserUploadLimit(req.user.id);
+    
+    // Store upload limit in request for use by multer error handler
+    req.userUploadLimit = uploadInfo.uploadLimit;
+    req.userPlan = uploadInfo.plan;
+    
+    console.log(`Upload limit for user ${req.user.id} (${uploadInfo.plan}):`, {
+      limit: uploadInfo.uploadLimitFormatted,
+      bytes: uploadInfo.uploadLimit
+    });
+    
+    next();
+  } catch (error) {
+    console.error('Error checking upload limit:', error);
+    res.status(500).json({ error: 'Failed to check upload limit' });
+  }
+};
+
+// Custom multer error handler with dynamic limits
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', err);
+    
+    const userUploadLimit = req.userUploadLimit || parseInt(process.env.MAX_FILE_SIZE) || 1073741824;
+    const userPlan = req.userPlan || 'FREE';
+    
+    console.log('Upload limits:', {
+      userPlan,
+      userUploadLimit: formatBytes(userUploadLimit),
+      globalMaxFileSize: process.env.MAX_FILE_SIZE
+    });
+    
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: 'File too large',
+        message: `File size exceeds the ${formatBytes(userUploadLimit)} limit for ${userPlan} plan`,
+        maxSize: userUploadLimit,
+        maxSizeFormatted: formatBytes(userUploadLimit),
+        plan: userPlan,
+        code: 'LIMIT_FILE_SIZE'
+      });
+    }
+    
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(413).json({
+        error: 'Too many files',
+        message: 'Maximum of 10 files allowed per upload',
+        code: 'LIMIT_FILE_COUNT'
+      });
+    }
+    
+    return res.status(400).json({
+      error: 'Upload error',
+      message: err.message,
+      code: err.code
+    });
+  }
+  
+  next(err);
+};
+
+// Dynamic upload middleware that checks user's file size limit
+const dynamicUpload = async (req, res, next) => {
+  try {
+    // First check user's upload limit
+    const uploadInfo = await getUserUploadLimit(req.user.id);
+    
+    // Store upload limit in request for use by multer error handler
+    req.userUploadLimit = uploadInfo.uploadLimit;
+    req.userPlan = uploadInfo.plan;
+    
+    console.log(`Upload attempt by user ${req.user.id} (${uploadInfo.plan}):`, {
+      limit: uploadInfo.uploadLimitFormatted,
+      bytes: uploadInfo.uploadLimit
+    });
+    
+    // Create a custom multer instance with user-specific limits
+    const userUpload = multer({
+      storage: storage,
+      limits: {
+        fileSize: uploadInfo.uploadLimit,
+        files: 10
+      },
+      fileFilter: (req, file, cb) => {
+        cb(null, true);
+      }
+    });
+    
+    // Use the custom multer instance
+    userUpload.single('file')(req, res, (err) => {
+      if (err) {
+        return handleMulterError(err, req, res, next);
+      }
+      next();
+    });
+    
+  } catch (error) {
+    console.error('Error in dynamic upload middleware:', error);
+    res.status(500).json({ error: 'Failed to process upload' });
+  }
+};
+
 // Upload file
-router.post('/upload', authenticateToken, upload.single('file'), checkStorageLimit, async (req, res) => {
+router.post('/upload', authenticateToken, dynamicUpload, checkStorageLimit, async (req, res) => {
+  let tempFilePath = null;
+  
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const { folderId } = req.body;
+    tempFilePath = req.file.path;
+
+    console.log(`🔄 Processing upload: ${req.file.originalname} (${req.file.size} bytes)`);
+
+    // Read file for upload to external storage
+    const fileBuffer = await fs.readFile(req.file.path);
 
     // Upload to external storage
     const uploadResult = await fileStorage.uploadFile(
       {
         originalname: req.file.originalname,
-        buffer: req.file.buffer,
+        buffer: fileBuffer,
         mimetype: req.file.mimetype,
         size: req.file.size
       },
@@ -66,8 +199,20 @@ router.post('/upload', authenticateToken, upload.single('file'), checkStorageLim
       }
     });
 
+    // Clean up temporary file
+    if (tempFilePath) {
+      try {
+        await fs.unlink(tempFilePath);
+        console.log(`🗑️  Cleaned up temp file: ${tempFilePath}`);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp file:', cleanupError);
+      }
+    }
+
     // Update user storage
     await updateUserStorage(req.user.id, req.file.size);
+
+    console.log(`✅ File uploaded successfully: ${req.file.originalname}`);
 
     res.status(201).json({
       message: 'File uploaded successfully',
@@ -82,6 +227,17 @@ router.post('/upload', authenticateToken, upload.single('file'), checkStorageLim
     });
   } catch (error) {
     console.error('Upload error:', error);
+    
+    // Clean up temporary file on error
+    if (tempFilePath) {
+      try {
+        await fs.unlink(tempFilePath);
+        console.log(`🗑️  Cleaned up temp file after error: ${tempFilePath}`);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp file after error:', cleanupError);
+      }
+    }
+    
     res.status(500).json({ error: 'Failed to upload file' });
   }
 });
@@ -291,6 +447,33 @@ router.post('/:id/share', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Share error:', error);
     res.status(500).json({ error: 'Failed to share file' });
+  }
+});
+
+// Debug endpoint to check upload configuration
+router.get('/upload-config', authenticateToken, async (req, res) => {
+  try {
+    const uploadInfo = await getUserUploadLimit(req.user.id);
+    
+    res.json({
+      // User-specific limits
+      userPlan: uploadInfo.plan,
+      userMaxFileSize: uploadInfo.uploadLimit,
+      userMaxFileSizeFormatted: uploadInfo.uploadLimitFormatted,
+      
+      // Global configuration
+      globalMaxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 1073741824,
+      maxFileSizeFormatted: formatBytes(parseInt(process.env.MAX_FILE_SIZE) || 1073741824),
+      maxFiles: 10,
+      
+      // Environment info
+      storageProvider: process.env.STORAGE_PROVIDER,
+      environment: process.env.NODE_ENV,
+      railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'not-railway'
+    });
+  } catch (error) {
+    console.error('Error getting upload config:', error);
+    res.status(500).json({ error: 'Failed to get upload configuration' });
   }
 });
 

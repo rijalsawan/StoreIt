@@ -942,7 +942,7 @@ async function handleSubscriptionCreated(subscription) {
       where: { id: userId },
       data: {
         customerId: customer.id,
-        storageLimit: plan.storageLimit,
+        storageLimit: STORAGE_LIMITS[planType],
         subscription: {
           upsert: {
             create: {
@@ -1004,7 +1004,7 @@ async function handleSubscriptionUpdated(subscription) {
     if (plan) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { storageLimit: plan.storageLimit }
+        data: { storageLimit: STORAGE_LIMITS[planType] }
       });
     }
 
@@ -1026,22 +1026,20 @@ async function handleSubscriptionDeleted(subscription) {
       return;
     }
 
-    // Reset to free plan
+    // Delete subscription and reset to free plan
+    await prisma.subscription.delete({
+      where: { userId: user.id }
+    });
+
+    // Reset user to free plan storage limit
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        storageLimit: SUBSCRIPTION_PLANS.FREE.storageLimit,
-        subscription: {
-          update: {
-            status: 'CANCELED',
-            plan: 'FREE',
-            cancelAtPeriodEnd: false
-          }
-        }
+        storageLimit: STORAGE_LIMITS.FREE
       }
     });
 
-    console.log(`Subscription deleted: ${subscription.id} for user ${user.id}`);
+    console.log(`Subscription deleted: ${subscription.id} for user ${user.id}, reset to FREE plan`);
   } catch (error) {
     console.error('Error handling subscription deleted:', error);
     throw error;
@@ -1311,7 +1309,15 @@ async function handleSubscriptionPaused(subscription) {
       }
     });
 
-    console.log(`Subscription paused: ${subscription.id} for user ${user.id}`);
+    // Reset to free plan storage limit when paused
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        storageLimit: STORAGE_LIMITS.FREE
+      }
+    });
+
+    console.log(`Subscription paused: ${subscription.id} for user ${user.id}, reset to FREE plan storage`);
   } catch (error) {
     console.error('Error handling subscription paused:', error);
     throw error;
@@ -1345,7 +1351,7 @@ async function handleSubscriptionResumed(subscription) {
     if (plan) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { storageLimit: plan.storageLimit }
+        data: { storageLimit: STORAGE_LIMITS[planType] }
       });
     }
 

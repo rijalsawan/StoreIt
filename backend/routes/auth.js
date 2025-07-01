@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
+const { STORAGE_LIMITS } = require('../utils/storage');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -41,7 +42,8 @@ router.post('/register', [
         email,
         password: hashedPassword,
         firstName,
-        lastName
+        lastName,
+        storageLimit: STORAGE_LIMITS.FREE // Explicitly set FREE plan storage limit
       }
     });
 
