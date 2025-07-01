@@ -49,15 +49,35 @@ const getUserStorageInfo = async (userId) => {
       throw new Error('User not found');
     }
 
-    const storageUsed = Number(user.storageUsed);
-    const storageLimit = Number(user.storageLimit);
-    const storagePercentage = (storageUsed / storageLimit) * 100;
+    // Handle BigInt conversion safely
+    const storageUsed = typeof user.storageUsed === 'bigint' 
+      ? Number(user.storageUsed) 
+      : Number(user.storageUsed || 0);
+    
+    const storageLimit = typeof user.storageLimit === 'bigint' 
+      ? Number(user.storageLimit) 
+      : Number(user.storageLimit || 1073741824); // Default 1GB
+    
+    // Extra safety check for NaN values
+    const safeStorageUsed = isNaN(storageUsed) ? 0 : storageUsed;
+    const safeStorageLimit = isNaN(storageLimit) ? 1073741824 : storageLimit;
+    
+    const storagePercentage = safeStorageLimit > 0 ? (safeStorageUsed / safeStorageLimit) * 100 : 0;
+
+    console.log(`Storage info for user ${userId}:`, {
+      rawStorageUsed: user.storageUsed,
+      rawStorageLimit: user.storageLimit,
+      rawTypes: `used: ${typeof user.storageUsed}, limit: ${typeof user.storageLimit}`,
+      processedStorageUsed: safeStorageUsed,
+      processedStorageLimit: safeStorageLimit,
+      percentage: storagePercentage
+    });
 
     return {
-      storageUsed: storageUsed,
-      storageLimit: storageLimit,
-      storageUsedFormatted: formatBytes(storageUsed),
-      storageLimitFormatted: formatBytes(storageLimit),
+      storageUsed: safeStorageUsed,
+      storageLimit: safeStorageLimit,
+      storageUsedFormatted: formatBytes(safeStorageUsed),
+      storageLimitFormatted: formatBytes(safeStorageLimit),
       storagePercentage: Math.round(storagePercentage * 100) / 100,
       plan: user.subscription?.plan || 'FREE'
     };

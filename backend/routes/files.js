@@ -242,8 +242,10 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       where: { id: file.id }
     });
 
-    // Update user storage
-    await updateUserStorage(req.user.id, -Number(file.size));
+    // Update user storage - handle BigInt properly
+    const fileSizeNumber = typeof file.size === 'bigint' ? Number(file.size) : Number(file.size || 0);
+    console.log(`Updating storage: removing ${fileSizeNumber} bytes for user ${req.user.id}`);
+    await updateUserStorage(req.user.id, -fileSizeNumber);
 
     res.json({ message: 'File deleted successfully' });
   } catch (error) {
