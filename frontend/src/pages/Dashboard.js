@@ -51,7 +51,10 @@ const Dashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFolder, setCurrentFolder] = useState(null);
   const [showUpload, setShowUpload] = useState(false);
-  const [storageInfo, setStorageInfo] = useState(null);
+  const [storageInfo, setStorageInfo] = useState({
+    storageUsed: 0,
+    storageLimit: 1073741824 // Default 1GB
+  });
   const [subscriptionData, setSubscriptionData] = useState(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -105,11 +108,14 @@ const Dashboard = () => {
       setFolders(foldersResponse.data.folders);
       
       // Safely handle storage data
-      const storageData = dashboardResponse.data.storageInfo;
+      const storageData = dashboardResponse.data?.storageInfo || {};
       const safeStorageInfo = {
         storageUsed: Number(storageData.storageUsed) || 0,
         storageLimit: Number(storageData.storageLimit) || 1073741824 // Default 1GB
       };
+      
+      console.log('Storage data from API:', storageData);
+      console.log('Safe storage info:', safeStorageInfo);
       
       setStorageInfo(safeStorageInfo);
       setSubscriptionData(subscriptionResponse.data);
@@ -378,8 +384,20 @@ const Dashboard = () => {
     file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const storageUsedPercent = storageInfo ? 
-    Math.round((storageInfo.storageUsed / storageInfo.storageLimit) * 100) : 0;
+  // Safely calculate storage percentage with multiple checks
+  const storageUsedPercent = (() => {
+    if (!storageInfo || typeof storageInfo.storageUsed !== 'number' || typeof storageInfo.storageLimit !== 'number') {
+      return 0;
+    }
+    
+    const used = Number(storageInfo.storageUsed) || 0;
+    const limit = Number(storageInfo.storageLimit) || 1;
+    
+    if (limit <= 0) return 0;
+    
+    const percentage = Math.round((used / limit) * 100);
+    return isNaN(percentage) ? 0 : Math.max(0, Math.min(100, percentage));
+  })();
 
   return (
     <div 
@@ -443,7 +461,7 @@ const Dashboard = () => {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Storage</h3>
                     <p className="text-sm text-gray-600">
-                      {formatBytes(storageInfo.storageUsed)} of {formatBytes(storageInfo.storageLimit)} used
+                      {formatBytes(storageInfo?.storageUsed || 0)} of {formatBytes(storageInfo?.storageLimit || 1073741824)} used
                     </p>
                   </div>
                   {subscriptionData?.planDetails?.name && subscriptionData.planDetails.name !== 'Free' && (
