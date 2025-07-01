@@ -6,6 +6,7 @@ import StorageIndicator from '../components/StorageIndicator';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useAuth } from '../context/AuthContext';
 import { api, formatBytes, getFileIcon, getFileTypeClass } from '../utils/api';
+import { withUploadProgress } from '../hoc/withUploadProgress';
 import toast from 'react-hot-toast';
 import { 
   Upload, 
@@ -41,8 +42,7 @@ import {
 } from 'lucide-react';
 
 // Main Dashboard component with upload context
-const DashboardContent = () => {
-  const uploadContext = useUpload();
+const Dashboard = () => {
   const { user, updateUser } = useAuth();
   const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -1255,5 +1255,5 @@ const DashboardContent = () => {
           );
         };
 
-// Export the main Dashboard component for now
-export default DashboardContent;
+// Export Dashboard with upload progress functionality
+export default withUploadProgress(Dashboard);
